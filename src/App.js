@@ -364,7 +364,8 @@ function NodeDetail({ node, onClose }) {
               onClick={() => onClose(child)}
               style={{
               padding:"8px 10px", marginBottom:6,
-              background:C.bgCard, border:`1px solid ${C.border}`,
+              background:C.bgCard,
+              border:`1px solid ${C.border}`,
               borderLeft:`3px solid ${child.color || C.gold}`,
               borderRadius:2, fontSize:11, color:C.cream,
               cursor:"pointer",
@@ -443,36 +444,40 @@ function RadialMindmap({ data, onNodeClick, selectedNode }) {
         
         const nodeR = 32;
 
-        const isSel = selectedNode && selectedNode.id === branch.id;
         return (
-          <g key={branch.id}
-             style={{ cursor:"pointer",
-               transformOrigin:`${pos.x}px ${pos.y}px`,
-               transform: isSel ? `scale(1.3) translate(0px,0px)` : `scale(1)`,
-               transition:"transform 0.25s ease" }}
+          <g key={branch.id} style={{ cursor:"pointer" }}
              onClick={() => onNodeClick(branch)}>
-            <circle cx={pos.x} cy={pos.y} r={nodeR + 8}
-              fill={branch.color} fillOpacity={isSel ? 0.28 : 0.07}/>
-            <circle cx={pos.x} cy={pos.y} r={nodeR}
-              fill={isSel ? branch.color : C.bgCard}
-              stroke={branch.color} strokeWidth={isSel ? 2.5 : 1.5}
-              filter={isSel ? "url(#glow)" : "none"}/>
-            <text x={pos.x} y={pos.y - 6} textAnchor="middle"
-              fill={isSel ? "#fff" : branch.color} fontSize={16} fontFamily="Georgia, serif">
-              {branch.icon}
-            </text>
-            <text x={pos.x} y={pos.y + 8} textAnchor="middle"
-              fill={isSel ? "#fff" : C.cream} fontSize={7.5} letterSpacing={1.5}
-              fontFamily="'Courier New', monospace" fontWeight="bold">
-              {branch.label.split(" ").slice(0,2).join(" ")}
-            </text>
-            {branch.label.split(" ").length > 2 && (
-              <text x={pos.x} y={pos.y + 18} textAnchor="middle"
-                fill={C.cream} fontSize={7.5} letterSpacing={1.5}
-                fontFamily="'Courier New', monospace" fontWeight="bold">
-                {branch.label.split(" ").slice(2).join(" ")}
-              </text>
-            )}
+            {(() => {
+              const isSel = selectedNode && selectedNode.id === branch.id;
+              const s = isSel ? 1.32 : 1;
+              const tx = pos.x * (1 - s);
+              const ty = pos.y * (1 - s);
+              return (
+                <g transform={`matrix(${s},0,0,${s},${tx},${ty})`}>
+                  <circle cx={pos.x} cy={pos.y} r={nodeR + 8}
+                    fill={branch.color} fillOpacity={isSel ? 0.25 : 0.07}/>
+                  <circle cx={pos.x} cy={pos.y} r={nodeR}
+                    fill={isSel ? branch.color : C.bgCard}
+                    stroke={branch.color} strokeWidth={isSel ? 2.5 : 1.5}/>
+                  <text x={pos.x} y={pos.y - 6} textAnchor="middle"
+                    fill={isSel ? "#ffffff" : branch.color} fontSize={16} fontFamily="Georgia, serif">
+                    {branch.icon}
+                  </text>
+                  <text x={pos.x} y={pos.y + 8} textAnchor="middle"
+                    fill={isSel ? "#ffffff" : C.cream} fontSize={7.5} letterSpacing={1.5}
+                    fontFamily="'Courier New', monospace" fontWeight="bold">
+                    {branch.label.split(" ").slice(0,2).join(" ")}
+                  </text>
+                  {branch.label.split(" ").length > 2 && (
+                    <text x={pos.x} y={pos.y + 18} textAnchor="middle"
+                      fill={isSel ? "#ffffff" : C.cream} fontSize={7.5} letterSpacing={1.5}
+                      fontFamily="'Courier New', monospace" fontWeight="bold">
+                      {branch.label.split(" ").slice(2).join(" ")}
+                    </text>
+                  )}
+                </g>
+              );
+            })()}
             {/* Child indicators */}
             {branch.children && branch.children.slice(0, 4).map((child, j) => {
               const childAngle = branchPos[i].angle + (j - 1.5) * 0.28;
