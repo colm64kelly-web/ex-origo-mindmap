@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 // ── PALETTE ────────────────────────────────────────────────────────────────
 const C = {
@@ -434,9 +434,9 @@ function RadialMindmap({ data, onNodeClick }) {
       {/* Branch nodes */}
       {branches.map((branch, i) => {
         const pos = branchPos[i];
-        const isLeft = pos.x < cx;
-        const labelX = pos.x + (isLeft ? -14 : 14);
-        const anchor = isLeft ? "end" : "start";
+        
+        
+        
         const nodeR = 32;
 
         return (
@@ -692,4 +692,3 @@ export default function ExOrigoMindmap() {
     </div>
   );
 }
- 
