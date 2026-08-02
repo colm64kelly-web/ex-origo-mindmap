@@ -316,7 +316,6 @@ const GAME_DATA = {
 // ── COMPONENTS ─────────────────────────────────────────────────────────────
 
 function NodeDetail({ node, onClose }) {
-  if (!node) return null;
   return (
     <div style={{
       position:"fixed", right:0, top:0, bottom:0, width:"min(420px,100vw)",
@@ -324,6 +323,8 @@ function NodeDetail({ node, onClose }) {
       zIndex:1000, overflowY:"auto", padding:"28px 24px",
       boxShadow:"-8px 0 40px rgba(0,0,0,0.6)",
       fontFamily:"'Courier New', monospace",
+      transform: node ? "translateX(0)" : "translateX(105%)",
+      transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
     }}>
       <button onClick={onClose} style={{
         position:"absolute", top:16, right:16,
@@ -359,14 +360,17 @@ function NodeDetail({ node, onClose }) {
             SUB-NODES ({node.children.length})
           </div>
           {node.children.map(child => (
-            <div key={child.id} style={{
+            <div key={child.id}
+              onClick={() => onClose(child)}
+              style={{
               padding:"8px 10px", marginBottom:6,
               background:C.bgCard, border:`1px solid ${C.border}`,
+              borderLeft:`3px solid ${child.color || C.gold}`,
               borderRadius:2, fontSize:11, color:C.cream,
-              cursor:"default",
+              cursor:"pointer",
             }}>
               <span style={{ color:child.color || C.gold, fontWeight:"bold", fontSize:10, letterSpacing:1 }}>
-                {child.label}
+                &#9654; {child.label}
               </span>
             </div>
           ))}
@@ -377,7 +381,7 @@ function NodeDetail({ node, onClose }) {
 }
 
 // Radial Mindmap (Desktop)
-function RadialMindmap({ data, onNodeClick }) {
+function RadialMindmap({ data, onNodeClick, selectedNode }) {
   const svgRef = useRef(null);
   const [dims, setDims] = useState({ w: 900, h: 700 });
 
@@ -439,19 +443,26 @@ function RadialMindmap({ data, onNodeClick }) {
         
         const nodeR = 32;
 
+        const isSel = selectedNode && selectedNode.id === branch.id;
         return (
-          <g key={branch.id} style={{ cursor:"pointer" }}
+          <g key={branch.id}
+             style={{ cursor:"pointer",
+               transformOrigin:`${pos.x}px ${pos.y}px`,
+               transform: isSel ? `scale(1.3) translate(0px,0px)` : `scale(1)`,
+               transition:"transform 0.25s ease" }}
              onClick={() => onNodeClick(branch)}>
-            <circle cx={pos.x} cy={pos.y} r={nodeR + 6}
-              fill={branch.color} fillOpacity={0.08}/>
+            <circle cx={pos.x} cy={pos.y} r={nodeR + 8}
+              fill={branch.color} fillOpacity={isSel ? 0.28 : 0.07}/>
             <circle cx={pos.x} cy={pos.y} r={nodeR}
-              fill={C.bgCard} stroke={branch.color} strokeWidth={1.5}/>
+              fill={isSel ? branch.color : C.bgCard}
+              stroke={branch.color} strokeWidth={isSel ? 2.5 : 1.5}
+              filter={isSel ? "url(#glow)" : "none"}/>
             <text x={pos.x} y={pos.y - 6} textAnchor="middle"
-              fill={branch.color} fontSize={16} fontFamily="Georgia, serif">
+              fill={isSel ? "#fff" : branch.color} fontSize={16} fontFamily="Georgia, serif">
               {branch.icon}
             </text>
             <text x={pos.x} y={pos.y + 8} textAnchor="middle"
-              fill={C.cream} fontSize={7.5} letterSpacing={1.5}
+              fill={isSel ? "#fff" : C.cream} fontSize={7.5} letterSpacing={1.5}
               fontFamily="'Courier New', monospace" fontWeight="bold">
               {branch.label.split(" ").slice(0,2).join(" ")}
             </text>
@@ -651,10 +662,17 @@ export default function ExOrigoMindmap() {
         display:"flex", gap:16, flexWrap:"wrap",
       }}>
         {data.branches.map(b => (
-          <span key={b.id} style={{ fontSize:8, letterSpacing:1.5,
-            color:b.color, textTransform:"uppercase", cursor:"pointer",
-          }} onClick={() => setSelectedNode(b)}>
-            {b.icon} {b.label}
+          <span key={b.id} onClick={() => setSelectedNode(b)}
+            style={{
+              fontSize:9, letterSpacing:1.5, fontWeight:"bold",
+              color: selectedNode && selectedNode.id === b.id ? C.gold : C.cream,
+              textTransform:"uppercase", cursor:"pointer",
+              padding:"2px 6px",
+              borderBottom: selectedNode && selectedNode.id === b.id
+                ? `2px solid ${C.gold}` : "2px solid transparent",
+              transition:"all 0.15s", whiteSpace:"nowrap",
+            }}>
+            {b.label}
           </span>
         ))}
       </div>
@@ -663,11 +681,11 @@ export default function ExOrigoMindmap() {
       <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
         {isMobile
           ? <HierarchicalMindmap data={data} onNodeClick={setSelectedNode}/>
-          : <RadialMindmap data={data} onNodeClick={setSelectedNode}/>
+          : <RadialMindmap data={data} onNodeClick={setSelectedNode} selectedNode={selectedNode}/>
         }
 
         {/* Detail panel */}
-        <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)}/>
+        <NodeDetail node={selectedNode} onClose={(n) => n ? setSelectedNode(n) : setSelectedNode(null)}/>
       </div>
 
       {/* ── FOOTER ── */}
