@@ -28,7 +28,7 @@ const C = {
 // Wrap a node label across up to 3 lines without dropping words.
 // Greedily packs words onto a line until it would exceed maxChars,
 // then overflows any remainder onto the last line rather than truncating.
-function wrapLabel(label, maxChars = 11, maxLines = 3) {
+function wrapLabel(label, maxChars = 8, maxLines = 3) {
   const words = (label || "").split(" ").filter(Boolean);
   const lines = [];
   let current = "";
@@ -313,7 +313,7 @@ function Detail({ node, onSelect, onClose, editMode, onUpdateNode }) {
   );
 }
 
-function RadialMap({ data, selected, onSelect, editMode, onUpdateNode }) {
+function RadialMap({ data, selected, onSelect, editMode, onUpdateNode, onToggleEdit, onReset }) {
   const ref = useRef(null);
   const wrapRef = useRef(null);
   const [dim, setDim] = useState({ w:900, h:700 });
@@ -391,11 +391,17 @@ function RadialMap({ data, selected, onSelect, editMode, onUpdateNode }) {
   const cy = dim.h / 2;
   // Branch nodes sit at inner ring
   const R1 = Math.min(cx, cy) * 0.38;
-  // Child nodes sit at outer ring
-  const R2 = Math.min(cx, cy) * 0.72;
+  // Child nodes sit on two staggered outer radii - crowded branches
+  // (5+ children) alternate near/far so nodes don't pack onto one ring
+  const R2a = Math.min(cx, cy) * 0.66;
+  const R2b = Math.min(cx, cy) * 0.86;
   const n = data.branches.length;
   const BNR = 28; // branch node radius
-  const CNR = 14; // child node radius
+  const CNR = 16; // child node radius
+  // Angular gap between adjacent branches - no branch's children may
+  // fan wider than this or they bleed into the neighbouring branch
+  const sector = (2 * Math.PI) / n;
+  const maxFanSpread = sector * 0.42;
 
   return (
     <div
@@ -443,13 +449,13 @@ function RadialMap({ data, selected, onSelect, editMode, onUpdateNode }) {
         const isHov = hovered === br.id;
         const nodeR = isSel ? BNR + 12 : isHov ? BNR + 5 : BNR;
 
-        // Spread child nodes in a fan around the branch direction.
-        // Scales with child count so branches with many children (e.g.
-        // SEVEN THREADS, OPEN QUESTIONS) get a wider arc instead of
-        // packing into the same fixed spread as a 3-child branch.
+        // Spread child nodes in a fan around the branch direction, but
+        // never wider than the safe sector to the neighbouring branch -
+        // that's what was letting OPEN QUESTIONS / SEVEN THREADS bleed
+        // into THE OBJECTS and THREE GENERATIONS.
         const children = br.children || [];
         const fanSpread = children.length > 1
-          ? Math.min(1.3, 0.25 + (children.length - 1) * 0.13)
+          ? Math.min(maxFanSpread, 0.22 + (children.length - 1) * 0.07)
           : 0;
 
         return (
@@ -470,9 +476,15 @@ function RadialMap({ data, selected, onSelect, editMode, onUpdateNode }) {
                 ? -fanSpread + (j / (total - 1)) * fanSpread * 2
                 : 0;
               const chAngle = brAngle + offset;
-              const chx = cx + R2 * Math.cos(chAngle);
-              const chy = cy + R2 * Math.sin(chAngle);
+              // Crowded branches (5+) alternate between the near and far
+              // ring so adjacent nodes aren't fighting for the same arc
+              const chR = (total > 4 && j % 2 === 1) ? R2b : R2a;
+              const chx = cx + chR * Math.cos(chAngle);
+              const chy = cy + chR * Math.sin(chAngle);
               const chSel = selected && selected.id === ch.id;
+              const chLines = wrapLabel(ch.label);
+              const longest = Math.max(...chLines.map(l => l.length));
+              const chFontSize = longest > 8 ? Math.max(4.5, 6 - (longest - 8) * 0.35) : 6;
 
               return (
                 <g key={ch.id}>
@@ -514,16 +526,17 @@ function RadialMap({ data, selected, onSelect, editMode, onUpdateNode }) {
                         />
                       </foreignObject>
                     ) : (
-                      /* Child label - wraps up to 3 lines, no words dropped */
-                      wrapLabel(ch.label).map((line, li, arr) => (
+                      /* Child label - wraps up to 3 lines, no words dropped,
+                         font shrinks a little if the longest line is wide */
+                      chLines.map((line, li, arr) => (
                         <text
                           key={li}
                           x={chx}
-                          y={chy + (li - (arr.length - 1) / 2) * 9}
+                          y={chy + (li - (arr.length - 1) / 2) * 8}
                           textAnchor="middle"
                           dominantBaseline="middle"
                           fill={chSel ? "#fff" : (ch.color || br.color)}
-                          fontSize={6}
+                          fontSize={chFontSize}
                           fontFamily="Courier New, monospace"
                           fontWeight="bold"
                         >
@@ -633,30 +646,52 @@ function RadialMap({ data, selected, onSelect, editMode, onUpdateNode }) {
       </g>
       </svg>
 
-      {/* Zoom controls */}
+      {/* Map controls - top-left, deliberately clear of the sidebar
+          (which is fixed top:0 to bottom:0 on the right and was hiding
+          these when they lived in the header or bottom-right) */}
       <div style={{
-        position:"absolute", right:12, bottom:12, display:"flex",
-        flexDirection:"column", gap:4, zIndex:5,
+        position:"absolute", left:12, top:12, display:"flex",
+        flexDirection:"column", gap:6, zIndex:5,
       }}>
-        <button onClick={() => setZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
-          style={zoomBtnStyle}>+</button>
-        <button onClick={resetView} style={{ ...zoomBtnStyle, fontSize:8 }}>
-          {Math.round(zoom * 100)}%
-        </button>
-        <button onClick={() => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}
-          style={zoomBtnStyle}>-</button>
-      </div>
-
-      {editMode && (
-        <div style={{
-          position:"absolute", left:12, bottom:12, fontSize:8,
-          letterSpacing:1, color:C.gold, background:C.bgP,
-          border:"1px solid "+C.gold, borderRadius:2, padding:"4px 8px",
-          zIndex:5,
-        }}>
-          EDIT MODE — DOUBLE-CLICK ANY NODE TO RENAME
+        <div style={{ display:"flex", gap:4 }}>
+          <button onClick={() => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}
+            style={zoomBtnStyle}>-</button>
+          <button onClick={resetView} style={{ ...zoomBtnStyle, width:44, fontSize:8 }}>
+            {Math.round(zoom * 100)}%
+          </button>
+          <button onClick={() => setZoom(z => Math.min(2.5, +(z + 0.15).toFixed(2)))}
+            style={zoomBtnStyle}>+</button>
         </div>
-      )}
+
+        <button onClick={onToggleEdit} style={{
+          padding:"6px 10px", border:"1px solid "+(editMode ? C.gold : C.border),
+          borderRadius:3, background: editMode ? C.gold : C.bgP,
+          color: editMode ? C.bg : C.cream, cursor:"pointer",
+          fontSize:9, letterSpacing:1, fontWeight:"bold",
+          fontFamily:"Courier New, monospace", textTransform:"uppercase",
+        }}>
+          {editMode ? "Editing: ON" : "Edit Mode"}
+        </button>
+
+        {editMode && (
+          <>
+            <button onClick={onReset} style={{
+              padding:"5px 10px", border:"1px solid "+C.border, borderRadius:3,
+              background:C.bgP, color:C.muted, cursor:"pointer",
+              fontSize:8, letterSpacing:1, fontFamily:"Courier New, monospace",
+            }}>
+              Reset this map
+            </button>
+            <div style={{
+              fontSize:8, letterSpacing:0.5, color:C.gold, background:C.bgP,
+              border:"1px solid "+C.gold, borderRadius:2, padding:"4px 8px",
+              maxWidth:150, lineHeight:1.4,
+            }}>
+              Double-click any node to rename, or edit in the sidebar
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -803,32 +838,7 @@ export default function App() {
           ))}
         </div>
 
-        {!mobile && (
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <button onClick={() => setEditMode(e => !e)} style={{
-              padding:"5px 12px", border:"1px solid "+(editMode ? C.gold : C.border),
-              borderRadius:2, background: editMode ? C.gold : "transparent",
-              color: editMode ? C.bg : C.muted, cursor:"pointer",
-              fontSize:9, letterSpacing:1.5, fontWeight:"bold",
-              fontFamily:"Courier New, monospace", textTransform:"uppercase",
-            }}>
-              {editMode ? "Editing: ON" : "Edit Mode"}
-            </button>
-            {editMode && (
-              <button onClick={resetMode} style={{
-                padding:"5px 10px", border:"1px solid "+C.border, borderRadius:2,
-                background:"transparent", color:C.muted, cursor:"pointer",
-                fontSize:9, letterSpacing:1, fontFamily:"Courier New, monospace",
-              }}>
-                Reset {mode}
-              </button>
-            )}
-          </div>
-        )}
-
-        <div style={{ fontSize:8, color:C.muted }}>
-          {editMode ? "DOUBLE-CLICK A NODE, OR EDIT IN THE SIDEBAR" : "CLICK ANY NODE TO EXPAND"}
-        </div>
+        <div style={{ fontSize:8, color:C.muted }}>CLICK ANY NODE TO EXPAND</div>
       </div>
 
       <div style={{ padding:"5px 16px", background:C.bgC, borderBottom:"1px solid "+C.border,
@@ -853,7 +863,8 @@ export default function App() {
         {mobile
           ? <HierMap data={data} selected={selected} onSelect={setSelected}/>
           : <RadialMap data={data} selected={selected} onSelect={setSelected}
-              editMode={editMode} onUpdateNode={updateNode}/>
+              editMode={editMode} onUpdateNode={updateNode}
+              onToggleEdit={() => setEditMode(e => !e)} onReset={resetMode}/>
         }
         <Detail node={selected} onSelect={setSelected} onClose={() => setSelected(null)}
           editMode={!mobile && editMode} onUpdateNode={updateNode}/>
