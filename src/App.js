@@ -232,13 +232,16 @@ function Detail({ node, onSelect, onClose }) {
 
 function RadialMap({ data, selected, onSelect }) {
   const ref = useRef(null);
-  const [dim, setDim] = useState({ w:800, h:600 });
+  const [dim, setDim] = useState({ w:900, h:700 });
   const [hovered, setHovered] = useState(null);
 
   useEffect(() => {
     const upd = () => {
       if (ref.current && ref.current.parentElement) {
-        setDim({ w: ref.current.parentElement.offsetWidth, h: ref.current.parentElement.offsetHeight });
+        setDim({
+          w: ref.current.parentElement.offsetWidth,
+          h: ref.current.parentElement.offsetHeight
+        });
       }
     };
     upd();
@@ -248,9 +251,13 @@ function RadialMap({ data, selected, onSelect }) {
 
   const cx = dim.w / 2;
   const cy = dim.h / 2;
-  const R = Math.min(cx, cy) * 0.55;
+  // Branch nodes sit at inner ring
+  const R1 = Math.min(cx, cy) * 0.38;
+  // Child nodes sit at outer ring
+  const R2 = Math.min(cx, cy) * 0.72;
   const n = data.branches.length;
-  const NR = 30;
+  const BNR = 28; // branch node radius
+  const CNR = 14; // child node radius
 
   return (
     <svg ref={ref} width={dim.w} height={dim.h} style={{ display:"block" }}>
@@ -259,120 +266,172 @@ function RadialMap({ data, selected, onSelect }) {
           <stop offset="0%" stopColor={C.gold} stopOpacity="0.2"/>
           <stop offset="100%" stopColor={C.gold} stopOpacity="0"/>
         </radialGradient>
-        <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="4" result="blur"/>
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="5" result="blur"/>
+          <feMerge>
+            <feMergeNode in="blur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
         </filter>
         <style>{`
-          @keyframes breathe { 0%,100%{r:39px} 50%{r:46px} }
+          @keyframes breathe { 0%,100%{r:38px} 50%{r:44px} }
           .cpulse { animation: breathe 4s ease-in-out infinite; }
-          .branch-node { transition: all 0.2s ease; }
-          .child-node { transition: all 0.25s ease; }
         `}</style>
       </defs>
 
       {data.branches.map((br, i) => {
-        const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
-        const bx = cx + R * Math.cos(angle);
-        const by = cy + R * Math.sin(angle);
+        const brAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
+        const bx = cx + R1 * Math.cos(brAngle);
+        const by = cy + R1 * Math.sin(brAngle);
         const isSel = selected && selected.id === br.id;
         const isHov = hovered === br.id;
-        const showChildren = isHov || isSel;
-        const nodeR = isSel ? NR + 14 : isHov ? NR + 8 : NR;
+        const nodeR = isSel ? BNR + 12 : isHov ? BNR + 5 : BNR;
+
+        // Spread child nodes in a fan around the branch direction
+        const children = br.children || [];
+        const fanSpread = children.length > 1 ? 0.52 : 0;
 
         return (
           <g key={br.id}>
-            <line x1={cx} y1={cy} x2={bx} y2={by}
-              stroke={br.color} strokeWidth={isSel ? 2 : 1}
-              strokeOpacity={isSel ? 0.7 : 0.3} strokeDasharray="4 3"/>
+            {/* Centre to branch line */}
+            <line
+              x1={cx} y1={cy} x2={bx} y2={by}
+              stroke={br.color}
+              strokeWidth={isSel ? 2 : 1}
+              strokeOpacity={isSel ? 0.7 : 0.35}
+              strokeDasharray="5 3"
+            />
 
-            {br.children && br.children.slice(0, Math.min(5, br.children.length)).map((ch, j) => {
-              const total = Math.min(5, br.children.length);
-              const ca = angle + (j - (total - 1) / 2) * 0.32;
-              const cr = R * 0.3;
-              const chx = bx + cr * Math.cos(ca);
-              const chy = by + cr * Math.sin(ca);
+            {/* Child nodes with their own branch sticks */}
+            {children.map((ch, j) => {
+              const total = children.length;
+              const offset = total > 1
+                ? -fanSpread + (j / (total - 1)) * fanSpread * 2
+                : 0;
+              const chAngle = brAngle + offset;
+              const chx = cx + R2 * Math.cos(chAngle);
+              const chy = cy + R2 * Math.sin(chAngle);
               const chSel = selected && selected.id === ch.id;
-              const opacity = showChildren ? 1 : 0;
-              const scale = showChildren ? 1 : 0.3;
-              const finalChx = showChildren ? chx : bx;
-              const finalChy = showChildren ? chy : by;
 
               return (
-                <g key={ch.id} className="child-node"
-                  onClick={e => { e.stopPropagation(); onSelect(ch); }}
-                  style={{ cursor:"pointer", opacity, transition:"opacity 0.25s ease" }}>
-                  <line x1={bx} y1={by} x2={finalChx} y2={finalChy}
-                    stroke={ch.color || br.color} strokeWidth={0.8}
-                    strokeOpacity={showChildren ? 0.35 : 0}
-                    style={{ transition:"all 0.25s ease" }}/>
-                  <circle cx={finalChx} cy={finalChy}
-                    r={chSel ? 16 : 13}
-                    fill={chSel ? (ch.color || br.color) : C.bgC}
-                    stroke={ch.color || br.color} strokeWidth={chSel ? 2 : 0.8}
-                    style={{ transition:"all 0.25s ease" }}/>
-                  <text x={finalChx} y={finalChy + 3}
-                    textAnchor="middle"
-                    fill={chSel ? "#fff" : (ch.color || br.color)}
-                    fontSize={5.5} fontFamily="Courier New, monospace"
-                    style={{ transition:"all 0.25s ease" }}>
-                    {ch.label.split(" ").slice(0, 2).join(" ").slice(0, 9)}
-                  </text>
+                <g key={ch.id}>
+                  {/* Branch to child stick */}
+                  <line
+                    x1={bx} y1={by}
+                    x2={chx} y2={chy}
+                    stroke={ch.color || br.color}
+                    strokeWidth={chSel ? 1.5 : 0.8}
+                    strokeOpacity={chSel ? 0.8 : 0.45}
+                  />
+                  {/* Child node circle */}
+                  <g
+                    onClick={e => { e.stopPropagation(); onSelect(ch); }}
+                    style={{ cursor:"pointer" }}
+                  >
+                    <circle
+                      cx={chx} cy={chy}
+                      r={chSel ? CNR + 5 : CNR}
+                      fill={chSel ? (ch.color || br.color) : C.bgC}
+                      stroke={ch.color || br.color}
+                      strokeWidth={chSel ? 2 : 1}
+                    />
+                    {/* Child label - split into 2 lines max */}
+                    {ch.label.split(" ").slice(0, 3).reduce((acc, w, wi, arr) => {
+                      const line1 = arr.slice(0, Math.ceil(arr.length / 2)).join(" ");
+                      const line2 = arr.slice(Math.ceil(arr.length / 2)).join(" ");
+                      return [line1, line2].filter(Boolean);
+                    }, []).map((line, li, arr) => (
+                      <text
+                        key={li}
+                        x={chx}
+                        y={chy + (li - (arr.length - 1) / 2) * 9}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill={chSel ? "#fff" : (ch.color || br.color)}
+                        fontSize={6}
+                        fontFamily="Courier New, monospace"
+                        fontWeight="bold"
+                      >
+                        {line}
+                      </text>
+                    ))}
+                  </g>
                 </g>
               );
             })}
 
-            <g className="branch-node"
+            {/* Branch node */}
+            <g
               onClick={() => onSelect(br)}
               onMouseEnter={() => setHovered(br.id)}
               onMouseLeave={() => setHovered(null)}
-              style={{ cursor:"pointer" }}>
-              <circle cx={bx} cy={by} r={nodeR + 10}
-                fill={br.color} fillOpacity={isSel ? 0.35 : isHov ? 0.18 : 0.07}
-                style={{ transition:"all 0.2s ease" }}/>
-              <circle cx={bx} cy={by} r={nodeR}
+              style={{ cursor:"pointer" }}
+            >
+              <circle
+                cx={bx} cy={by}
+                r={nodeR + 8}
+                fill={br.color}
+                fillOpacity={isSel ? 0.3 : isHov ? 0.15 : 0.07}
+              />
+              <circle
+                cx={bx} cy={by}
+                r={nodeR}
                 fill={isSel ? br.color : isHov ? C.bgP : C.bgC}
-                stroke={br.color} strokeWidth={isSel ? 3 : isHov ? 2 : 1.5}
+                stroke={br.color}
+                strokeWidth={isSel ? 3 : 1.5}
                 filter={isSel ? "url(#glow)" : "none"}
-                style={{ transition:"all 0.2s ease" }}/>
-              <text x={bx} y={by - 7} textAnchor="middle"
+              />
+              <text
+                x={bx} y={by - 6}
+                textAnchor="middle"
                 fill={isSel ? "#fff" : br.color}
-                fontSize={isSel ? 18 : isHov ? 16 : 15}
+                fontSize={isSel ? 17 : 14}
                 fontFamily="Georgia, serif"
-                style={{ transition:"all 0.2s ease" }}>
+              >
                 {br.icon}
               </text>
               {br.label.split(" ").map((w, wi) => (
-                <text key={wi} x={bx} y={by + 6 + wi * 10}
+                <text
+                  key={wi}
+                  x={bx} y={by + 5 + wi * 9}
                   textAnchor="middle"
-                  fill={isSel ? "#fff" : isHov ? C.cream : C.cream}
-                  fontSize={isSel ? 8 : 7} letterSpacing={1}
-                  fontFamily="Courier New, monospace" fontWeight="bold"
-                  style={{ transition:"all 0.2s ease" }}>
+                  fill={isSel ? "#fff" : C.cream}
+                  fontSize={isSel ? 7.5 : 6.5}
+                  letterSpacing={0.8}
+                  fontFamily="Courier New, monospace"
+                  fontWeight="bold"
+                >
                   {w}
                 </text>
               ))}
               {isSel && (
-                <circle cx={bx} cy={by} r={nodeR + 18}
-                  fill="none" stroke={br.color} strokeWidth={1}
-                  strokeOpacity={0.4} strokeDasharray="3 4"/>
+                <circle
+                  cx={bx} cy={by}
+                  r={nodeR + 16}
+                  fill="none"
+                  stroke={br.color}
+                  strokeWidth={0.8}
+                  strokeOpacity={0.4}
+                  strokeDasharray="3 5"
+                />
               )}
             </g>
           </g>
         );
       })}
 
+      {/* Central node */}
       <g onClick={() => onSelect(data.center)} style={{ cursor:"pointer" }}>
-        <circle cx={cx} cy={cy} r={80} fill="url(#cg)"/>
-        <circle cx={cx} cy={cy} r={39} className="cpulse"
+        <circle cx={cx} cy={cy} r={75} fill="url(#cg)"/>
+        <circle cx={cx} cy={cy} r={36} className="cpulse"
           fill={C.bg} stroke={C.gold} strokeWidth={2}/>
-        <circle cx={cx} cy={cy} r={36}
+        <circle cx={cx} cy={cy} r={33}
           fill="none" stroke={C.gold} strokeWidth={0.8} strokeDasharray="3 2"/>
-        <text x={cx} y={cy - 5} textAnchor="middle"
-          fill={C.gold} fontSize={12} letterSpacing={4}
+        <text x={cx} y={cy - 4} textAnchor="middle"
+          fill={C.gold} fontSize={11} letterSpacing={3.5}
           fontFamily="Georgia, serif" fontWeight="bold">EX ORIGO</text>
         <text x={cx} y={cy + 10} textAnchor="middle"
-          fill={C.muted} fontSize={7} letterSpacing={2}
+          fill={C.muted} fontSize={6.5} letterSpacing={1.5}
           fontFamily="Courier New, monospace">{data.center.sub}</text>
       </g>
     </svg>
