@@ -394,14 +394,26 @@ function RadialMap({ data, selected, onSelect, editMode, onUpdateNode, onToggleE
   // Child nodes sit on two staggered outer radii - crowded branches
   // (5+ children) alternate near/far so nodes don't pack onto one ring
   const R2a = Math.min(cx, cy) * 0.66;
-  const R2b = Math.min(cx, cy) * 0.86;
-  const n = data.branches.length;
+  const R2b = Math.min(cx, cy) * 0.88;
   const BNR = 28; // branch node radius
-  const CNR = 16; // child node radius
-  // Angular gap between adjacent branches - no branch's children may
-  // fan wider than this or they bleed into the neighbouring branch
-  const sector = (2 * Math.PI) / n;
-  const maxFanSpread = sector * 0.42;
+  const CNR = 15; // child node radius
+
+  // Give each branch an angular SECTOR proportional to its own child
+  // count, packed sequentially around the circle. This guarantees - by
+  // construction, not by a tuned constant - that one branch's children
+  // can never bleed into a neighbouring branch's sector, regardless of
+  // how many children either branch has.
+  const totalWeight = data.branches.reduce(
+    (s, br) => s + Math.max((br.children || []).length, 1), 0
+  );
+  let cum = -Math.PI / 2;
+  const layout = data.branches.map(br => {
+    const weight = Math.max((br.children || []).length, 1);
+    const sectorWidth = (weight / totalWeight) * 2 * Math.PI;
+    const angle = cum + sectorWidth / 2;
+    cum += sectorWidth;
+    return { br, angle, sectorWidth };
+  });
 
   return (
     <div
@@ -441,22 +453,18 @@ function RadialMap({ data, selected, onSelect, editMode, onUpdateNode, onToggleE
         `}</style>
       </defs>
 
-      {data.branches.map((br, i) => {
-        const brAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
+      {layout.map(({ br, angle: brAngle, sectorWidth }) => {
         const bx = cx + R1 * Math.cos(brAngle);
         const by = cy + R1 * Math.sin(brAngle);
         const isSel = selected && selected.id === br.id;
         const isHov = hovered === br.id;
         const nodeR = isSel ? BNR + 12 : isHov ? BNR + 5 : BNR;
 
-        // Spread child nodes in a fan around the branch direction, but
-        // never wider than the safe sector to the neighbouring branch -
-        // that's what was letting OPEN QUESTIONS / SEVEN THREADS bleed
-        // into THE OBJECTS and THREE GENERATIONS.
+        // Children stay within 65% of the branch's own sector half-width,
+        // leaving a guaranteed buffer to the neighbouring branch on
+        // both sides no matter how the child counts are distributed.
         const children = br.children || [];
-        const fanSpread = children.length > 1
-          ? Math.min(maxFanSpread, 0.22 + (children.length - 1) * 0.07)
-          : 0;
+        const fanSpread = children.length > 1 ? (sectorWidth / 2) * 0.65 : 0;
 
         return (
           <g key={br.id}>
