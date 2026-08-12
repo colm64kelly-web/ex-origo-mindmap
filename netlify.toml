@@ -1,0 +1,42 @@
+[build]
+  command = "npm run build"
+  publish = "build"
+
+# index.html and the root path must NEVER be cached. This is what tells
+# the browser to check for a new build on every visit. Without this,
+# browsers can keep serving an old index.html that points at old,
+# deleted JS bundle files.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Netlify-CDN-Cache-Control = "no-cache"
+    Pragma = "no-cache"
+    Expires = "0"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Netlify-CDN-Cache-Control = "no-cache"
+    Pragma = "no-cache"
+    Expires = "0"
+
+# Create React App content-hashes every filename in /static (e.g.
+# main.a1b2c3.js). Because a code change always produces a NEW filename,
+# these files can be cached aggressively and permanently — there is no
+# risk of serving stale content, because "the same filename" always
+# means "the same content." This is what was previously missing: no
+# explicit rule existed for this folder, so it fell back to an
+# unwritten platform default instead of a guaranteed, version-controlled
+# policy.
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Baseline security/consistency headers, harmless but good practice.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
